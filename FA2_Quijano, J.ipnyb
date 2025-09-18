@@ -1,0 +1,50 @@
+from scipy import stats
+import numpy as np
+import pandas as pd
+
+data = ("88 45 53 86 33 86 85 30 89 53 41 96 56 38 62 "
+        "71 51 86 68 29 28 47 33 37 25 36 33 94 73 46 "
+        "42 34 79 72 88 99 82 62 57 42 28 55 67 62 60 "
+        "96 61 57 75 93 34 75 53 32 28 73 51 69 91 35")
+
+data_num = data.split()
+data_num = [int(i) for i in data_num]
+data_num = np.array(data_num)
+print(data_num)
+
+pop = len(data_num)
+mode = stats.mode(data_num, keepdims=True)[0][0]
+median = np.median(data_num)
+mean = np.mean(data_num)
+stdev = np.std(data_num, ddof=1)
+variance = np.var(data_num, ddof=1)
+skewness = stats.skew(data_num)
+kurtosis = stats.kurtosis(data_num)
+sem = stats.sem(data_num)
+se_skew = np.sqrt(6/pop)
+se_kurt = np.sqrt(24/pop)
+
+p25, p50, p75, p90, p95 = np.percentile(data_num, [25, 50, 75, 90, 95])
+
+table = {
+    "Valid": pop,
+    "Mode": mode,
+    "Median": median,
+    "Mean": round(mean, 3),
+    "Std. Deviation": round(stdev, 3),
+    "Variance": round(variance, 3),
+    "Skewness": round(skewness, 3),
+    "Std. Error of Skewness": round(se_skew, 3),
+    "Kurtosis": round(kurtosis, 3),
+    "Std. Error of Kurtosis": round(se_kurt, 3),
+    "Minimum": np.min(data_num),
+    "Maximum": np.max(data_num),
+    "25th percentile": round(p25, 3),
+    "50th percentile": round(p50, 3),
+    "75th percentile": round(p75, 3),
+    "90th percentile": round(p90, 3),
+    "95th percentile": round(p95, 3),
+}
+
+df = pd.DataFrame(table, index=["Score"]).T
+print(df)
