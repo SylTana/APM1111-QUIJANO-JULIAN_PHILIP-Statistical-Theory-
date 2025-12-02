@@ -1,0 +1,280 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r}
+library(tidyr)
+
+fertilizer = c(
+  rep("Blend X", 5),
+  rep("Blend Y", 5),
+  rep("Blend Z", 5)
+)
+
+df = data.frame(
+  Fertilizer = fertilizer,
+  Wheat = c(
+    123, 156, 112, 100, 168,
+    135, 130, 176, 120, 155,
+    156, 180, 147, 146, 193
+    ),
+  Corn = c(
+    128, 150, 174, 116, 109,
+    175, 132, 120, 187, 184,
+    186, 138, 178, 176, 190
+    ),
+  Soy = c(
+    166, 178, 187, 153, 195,
+    140, 145, 159, 131, 126,
+    185, 206, 188, 165, 188
+    ),
+  Rice = c(
+    151, 125, 117, 155, 158,
+    167, 183, 142, 167, 168,
+    175, 173, 154, 191, 169
+    )
+)
+
+df_graph <- df |>
+  pivot_longer(
+    cols = Wheat:Rice,
+    names_to = "Crop",
+    values_to = "Yield"
+  )
+
+df_graph
+```
+
+### Assumptions
+
+Assumption #1: You have one dependent variable that is measured at the continuous level.
+
+Assumption #2: You have one independent variable that consists of three or more categorical, independent groups.
+
+Assumption #3: You should have independence of observations, which means that there is no relationship between the observations in each group of the independent variable or among the groups themselves.
+
+Assumption #4: There should be no significant outliers in the three or more groups of your independent variable in terms of the dependent variable.
+
+Assumption #5: Your dependent variable should be approximately normally distributed for each group of the independent variable. Remark: Given the P-values for all treatment types are p > 0.05, then the weights are approximately normally distributed for all groups.
+
+Assumption #6. You have homogeneity of variances (i.e., the variance of the dependent variable is equal in each group of your independent variable).
+
+### Hypothesis
+
+**Null hypothesis:** There is no significant interaction effect on yield between fertilizer and crop.
+
+**Alternative hypothesis:** There is significant interaction effect on yield between fertilizer and crop.
+
+### Checking of Assumptions
+
+Assumption #1: You have one dependent variable that is measured at the continuous level.
+
+Remark: The dependent variable (Yield) is continuous
+
+Assumption #2: You have two independent variables that consist of two or more categorical, independent groups.
+
+Remark: The two independent variables are Fertilizers and Crops and are independent groups.
+
+Assumption #3: You should have independence of observations, which means that there is no relationship between the observations in each group of the independent variable or among the groups themselves.
+
+Remark: There exists independence of observations between all groups of fertilizers, as well as all groups of crops.
+
+```{r, fig.width=6, fig.height=20}
+library(tidyverse)
+library(tidyquant)
+library(ggdist)
+library(ggthemes)
+library(car)
+library(effectsize)
+library(kableExtra)
+library(broom)
+
+df_graph %>%
+  ggplot(aes(x=factor(Fertilizer), y=Yield, fill=Fertilizer)) +
+  
+  stat_halfeye(
+    adjust = 0.3,
+    justification = -0.2,
+    .width = 0,
+    point_colour = NA,
+    width = 1
+  ) +
+  geom_boxplot(
+    width = 0.1,
+    outlier.color = NA,
+    alpha = 0.5,
+    show.legend = FALSE
+  ) +
+  stat_dots(
+    side = "left",
+    justification = 1.1,
+    binwidth = 2,
+    show.legend = FALSE
+  ) +
+  facet_wrap(~ Crop, ncol=1, scales="free_y") +
+  scale_fill_tq() +
+  theme_tq() +
+  labs(
+    title = "Raincloud Plot of Crop Yield by Fertilizer",
+    x = "Fertilizer",
+    y = "Yield",
+    fill = ""
+  ) +
+  coord_flip()
+
+```
+
+Assumption #4: There should be no significant outliers in the three or more groups of your independent variables in terms of the dependent variable.
+
+Remark: By visual inspection of the raincloud plot of crop yields, there are no significant outliers for any of the fertilizer groups in any crop groups in terms of the dependent variable.
+
+```{r}
+get_stats = function(x){
+  valid = sum((!is.na(x)))
+  missing = sum((is.na(x)))
+  mean_x = (mean(x, na.rm=TRUE))
+  sd_x = (sd(x, na.rm=TRUE))
+  skew_x = moments::skewness(x, na.rm = TRUE)
+  se_skew = sqrt(6/valid)
+  kurt_x = moments::skewness(x, na.rm = TRUE)
+  se_kurt = sqrt(24/valid)
+  shap_wilk_w = shapiro.test(x)$statistic
+  shap_wilk_p = shapiro.test(x)$p.value
+  
+  return(data.frame(
+    Valid = valid,
+    Missing = missing,
+    Mean = mean_x,
+    SD = sd_x,
+    Skewness = skew_x,
+    SE_Skewness = se_skew,
+    Kurtosis = kurt_x,
+    SE_Kurtosis = se_kurt,
+    Shapiro_W = shap_wilk_w,
+    Shapiro_P = shap_wilk_p
+  ))
+}
+
+descriptive_table = df_graph %>%
+  group_by(Fertilizer, Crop) %>%
+  summarise(get_stats(Yield), .groups='drop')
+
+descriptive_table
+
+```
+
+Assumption #5: Your dependent variable should be approximately normally distributed for each group of the independent variable.
+
+Remark: Given the P-values for all fertilizer types and crop groups are p > 0.05, then the yields are approximately normally distributed for all groups.
+
+```{r}
+df_graph %>%
+  group_by(Crop) %>%
+  group_map(~ leveneTest(Yield ~ Fertilizer, data=.x))
+
+```
+
+Assumption #6. You have homogeneity of variances (i.e., the variance of the dependent variable is equal in each group of your independent variable).
+
+Remark: With p > 0.05 from all the Levene Tests, we can say that there is equal variance of the dependent variable across all fertilizer type groups.
+
+### Computation
+
+```{r}
+df_anova = aov(Yield ~ Fertilizer * Crop, data = df_graph)
+summary(df_anova)
+
+cat("\n\n\n")
+eta_partial_squared = eta_squared(df_anova, partial=TRUE)
+eta_partial_squared
+
+```
+
+```{r}
+df_descriptive_stats = data.frame(Fertilizer = c("Blend X",
+                                     "",
+                                     "",
+                                     "",
+                                     "Blend Y",
+                                     "",
+                                     "",
+                                     "",
+                                     "Blend Z",
+                                     "",
+                                     "",
+                                     ""),
+                      Crop = c("Corn",
+                               "Rice",
+                               "Soy",
+                               "Wheat",
+                               "Corn",
+                               "Rice",
+                               "Soy",
+                               "Wheat",
+                               "Corn",
+                               "Rice",
+                               "Soy",
+                               "Wheat"),
+                      Mean = c(descriptive_table$Mean),
+                      SD = c(descriptive_table$SD),
+                      Valid = c(descriptive_table$Valid)
+                  )
+df_descriptive_stats
+```
+
+```{r}
+tukey_results <- df_graph %>%
+  group_by(Crop) %>%
+  do(tidy(TukeyHSD(aov(Yield ~ Fertilizer, data = .)))) %>%
+  ungroup()
+
+tukey_results <- tukey_results %>%
+  separate(contrast, into = c("Group1","Group2"), sep = "-")
+
+tukey_results
+
+
+```
+
+### Report
+
+A two-way ANOVA was conducted to determine if the yield of crops were significantly affected by crop type and fertilizer type. All assumptions were determined to be achieved. Normality was observed through Shaphiro-Wilk test (p > 0.05) for all groups. Homogeneity of variances was also observed through Levene Test (p > 0.05) for all crop types. Then, the two-way ANOVA was conducted and we determined that fertilizers had significant effect on the yield (p = 0.000245 < 0.05). Crop type may have had some effect (p = 0.064944 ~ 0.05) but was not strictly significant. Then, the combination between fertilizers and crop types suggests significant interaction between them (p = 0.045555 < 0.05). Next, partial eta squared values are as follows: Fertilizer (0.29, 95% CI [0.11, 1.00]) explains 29 percent of variance, large effect; Crop (0.14, 95% CI [0.00, 1.00] explains 14 percent of variance, medium effect; Fertilizer:Crop (0.23, 95% CI [0.00, 1.00] explains 23 percent of variance, moderate effect.
+
+Finally, the Tukey HSD results indicate the following:
+
+#### Corn
+
+No pairwise differences were statistically significant (all adjusted p-values > 0.05).
+
+For example, the mean difference between Blend Z and Blend X was 38.2, 95% CI [-6.60, 83.0], p = 0.098.
+
+Interpretation: Corn yields did not differ significantly among the three fertilizers.
+
+#### Rice
+
+Blend Z produced significantly higher yields than Blend X (mean difference = 31.2, 95% CI [4.57, 57.83], p = 0.022).
+
+The other comparisons (Blend Y vs Blend X, Blend Z vs Blend Y) were not significant (p > 0.05).
+
+Interpretation: For Rice, Blend Z performed better than Blend X; the other fertilizers were similar.
+
+#### Soy
+
+Blend Y yielded significantly less than Blend X (mean difference = -35.6, 95% CI [-60.56, -10.64], p = 0.007).
+
+Blend Z was not significantly different from Blend X (p = 0.51), but was significantly higher than Blend Y (mean difference = 46.2, 95% CI [21.24, 71.16], p = 0.001).
+
+Interpretation: Blend Y underperformed compared to the other blends; Blend Z matched Blend X.
+
+#### Wheat
+
+No significant differences were observed between any fertilizer pair (all p > 0.05).
+
+Interpretation: Wheat yields were similar across all three fertilizer blends.
+
+Finally, given the significant effects Fertilizer and Fertilizer:Crop had on the variance of the data, we reject the **Null hypothesis:** There is no significant interaction effect on yield between fertilizer and crop.
+
+Github Link: <https://github.com/SylTana/APM1111-QUIJANO-JULIAN_PHILIP-Statistical-Theory-/tree/main/FA9>
